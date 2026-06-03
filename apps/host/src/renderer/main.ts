@@ -123,6 +123,7 @@ async function startSharing(): Promise<void> {
       audio: false,
     });
   } catch (err) {
+    console.error("getDisplayMedia error:", err);
     const e = err as Error;
     if (e.name === "AbortError" || e.message?.includes("cancelled") || e.message?.includes("cancel")) {
       setStatus("用户取消共享", "disconnected");
