@@ -160,6 +160,11 @@ export function getRoomCount(): number {
   return roomMap.size;
 }
 
+export function clearAllRooms(): void {
+  roomMap.clear();
+  orphanTimestamps.clear();
+}
+
 export function cleanOrphanRooms(): void {
   const now = Date.now();
   const orphanTimeout = 60_000;
