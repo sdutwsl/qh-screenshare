@@ -1,6 +1,5 @@
 import { createServer } from "node:http";
 import { WebSocketServer, WebSocket } from "ws";
-import { randomUUID } from "node:crypto";
 import { logger, SIGNALING_PATH, HEALTHZ_PATH } from "@uos/shared";
 import { validateMessage, isValidWebSocketMessage } from "./protocol";
 import {
@@ -31,16 +30,16 @@ const server = createServer((req, res) => {
 const wss = new WebSocketServer({ server, path: WS_PATH });
 
 wss.on("connection", (ws: WebSocket) => {
-  const peerId = randomUUID();
+  let peerId: string | undefined;
   let boundRoomId: string | undefined;
 
-  logger.info("Client connected", { peerId });
+  function sendError(code: string, message: string): void {
+    ws.send(JSON.stringify({ type: "error", code, message }));
+  }
 
   ws.on("message", (raw: Buffer) => {
     if (!isValidWebSocketMessage(raw)) {
-      ws.send(
-        JSON.stringify({ type: "error", code: "MESSAGE_TOO_LARGE", message: "Message too large" }),
-      );
+      sendError("MESSAGE_TOO_LARGE", "Message too large");
       return;
     }
 
@@ -48,29 +47,24 @@ wss.on("connection", (ws: WebSocket) => {
     try {
       data = JSON.parse(raw.toString());
     } catch {
-      ws.send(
-        JSON.stringify({ type: "error", code: "INVALID_JSON", message: "Invalid JSON" }),
-      );
+      sendError("INVALID_JSON", "Invalid JSON");
       return;
     }
 
     const msg = validateMessage(data);
     if (!msg) {
-      ws.send(
-        JSON.stringify({ type: "error", code: "INVALID_MESSAGE", message: "Invalid message format" }),
-      );
+      sendError("INVALID_MESSAGE", "Invalid message format");
       return;
     }
 
     switch (msg.type) {
       case "create-room": {
         if (boundRoomId) {
-          ws.send(
-            JSON.stringify({ type: "error", code: "ALREADY_IN_ROOM", message: "Already in a room" }),
-          );
+          sendError("ALREADY_IN_ROOM", "Already in a room");
           return;
         }
 
+        peerId = msg.peerId!;
         const room = createRoom(ws, peerId);
         boundRoomId = room.roomId;
 
@@ -88,11 +82,11 @@ wss.on("connection", (ws: WebSocket) => {
         if (!msg.roomId) return;
 
         if (boundRoomId) {
-          ws.send(
-            JSON.stringify({ type: "error", code: "ALREADY_IN_ROOM", message: "Already in a room" }),
-          );
+          sendError("ALREADY_IN_ROOM", "Already in a room");
           return;
         }
+
+        peerId = msg.peerId!;
 
         const result = addViewerToRoom(msg.roomId, ws, peerId);
         if (!result.success) {
@@ -101,17 +95,19 @@ wss.on("connection", (ws: WebSocket) => {
             ROOM_HAS_NO_HOST: "Room has no host",
             ROOM_FULL: "Room is full",
           };
-          ws.send(
-            JSON.stringify({
-              type: "error",
-              code: result.error,
-              message: errorMessages[result.error] || "Unknown error",
-            }),
-          );
+          sendError(result.error, errorMessages[result.error] || "Unknown error");
           return;
         }
 
         boundRoomId = msg.roomId;
+
+        ws.send(
+          JSON.stringify({
+            type: "viewer-accepted",
+            roomId: msg.roomId,
+            viewerPeerId: peerId,
+          }),
+        );
 
         const hostPeerId = getHostPeerId(msg.roomId);
         if (hostPeerId) {
@@ -125,6 +121,7 @@ wss.on("connection", (ws: WebSocket) => {
       }
 
       case "leave": {
+        if (!peerId) return;
         if (msg.roomId && boundRoomId) {
           sendToRoomExcept(msg.roomId, peerId, {
             type: "leave",
@@ -139,18 +136,13 @@ wss.on("connection", (ws: WebSocket) => {
       case "offer":
       case "answer":
       case "ice-candidate": {
+        if (!peerId) return;
         if (!msg.roomId || !msg.toPeerId) return;
 
         const forward = { ...msg, fromPeerId: peerId };
         const sent = sendToPeer(msg.toPeerId, forward);
         if (!sent) {
-          ws.send(
-            JSON.stringify({
-              type: "error",
-              code: "PEER_NOT_FOUND",
-              message: "Target peer not found",
-            }),
-          );
+          sendError("PEER_NOT_FOUND", "Target peer not found");
         }
         break;
       }
@@ -158,14 +150,17 @@ wss.on("connection", (ws: WebSocket) => {
   });
 
   ws.on("close", () => {
-    logger.info("Client disconnected", { peerId });
-    cleanupPeer(peerId);
+    if (peerId) {
+      cleanupPeer(peerId);
+    }
   });
 
   ws.on("error", (err: Error) => {
     logger.error("WebSocket error", { peerId });
     logger.error(err.message);
-    cleanupPeer(peerId);
+    if (peerId) {
+      cleanupPeer(peerId);
+    }
   });
 
   function cleanupPeer(pid: string): void {
@@ -183,6 +178,7 @@ wss.on("connection", (ws: WebSocket) => {
       }
     }
     boundRoomId = undefined;
+    peerId = undefined;
   }
 });
 

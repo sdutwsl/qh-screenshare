@@ -78,6 +78,7 @@ async function startConnection(roomId: string): Promise<void> {
           type: "join-room",
           role: "viewer",
           roomId,
+          peerId: peerId!,
         });
         break;
 

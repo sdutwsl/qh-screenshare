@@ -20,11 +20,13 @@ export function validateMessage(data: unknown): SignalMessage | null {
 
   if (msg.type === "create-room") {
     if (msg.role !== "host") return null;
+    if (typeof msg.peerId !== "string" || msg.peerId.length === 0) return null;
   }
 
   if (msg.type === "join-room") {
     if (msg.role !== "viewer") return null;
     if (typeof msg.roomId !== "string" || !/^[0-9]{6}$/.test(msg.roomId)) return null;
+    if (typeof msg.peerId !== "string" || msg.peerId.length === 0) return null;
   }
 
   if (msg.type === "leave") {
@@ -49,18 +51,12 @@ export function validateMessage(data: unknown): SignalMessage | null {
   return msg as unknown as SignalMessage;
 }
 
-export function createErrorMessage(
-  code: string,
-  message: string,
-): SignalMessage {
-  return { type: "error", code, message };
-}
-
 export function isValidWebSocketMessage(
-  data: unknown,
+  data: Buffer | string,
   maxSize: number = 64 * 1024,
 ): boolean {
-  if (typeof data === "string" && Buffer.byteLength(data) > maxSize) {
+  const length = typeof data === "string" ? Buffer.byteLength(data) : data.byteLength;
+  if (length > maxSize) {
     return false;
   }
   return true;

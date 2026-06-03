@@ -150,6 +150,7 @@ async function startSharing(): Promise<void> {
         signaling!.send({
           type: "create-room",
           role: "host",
+          peerId: hostPeerId!,
         });
         break;
 
