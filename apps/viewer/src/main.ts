@@ -35,6 +35,14 @@ function hideError(): void {
   errorArea.classList.add("hidden");
 }
 
+function cleanupVideo(): void {
+  if (remoteVideo.srcObject) {
+    remoteVideo.srcObject = null;
+  }
+  remoteVideo.classList.remove("active");
+  videoPlaceholder.classList.remove("hidden");
+}
+
 function getSignalingUrl(): string {
   const urlParams = new URLSearchParams(window.location.search);
   const serverFromParam = urlParams.get("server");
@@ -84,6 +92,7 @@ async function startConnection(roomId: string): Promise<void> {
 
       case "disconnected":
         setStatus("已断开", "disconnected");
+        cleanupVideo();
         updateUI(false);
         break;
 
@@ -117,6 +126,11 @@ async function startConnection(roomId: string): Promise<void> {
       onStatusChange: (status: string) => {
         setStatus(status, "connected");
       },
+      onDisconnected: () => {
+        cleanupVideo();
+        setStatus("已断开", "disconnected");
+        updateUI(false);
+      },
       onError: (code: string, message: string) => {
         showError(`[${code}] ${message}`);
       },
@@ -131,11 +145,11 @@ async function startConnection(roomId: string): Promise<void> {
 
 function disconnect(): void {
   if (signaling) {
-    if (signaling.getIsConnected()) {
+    if (signaling.getIsConnected() && peerId) {
       signaling.send({
         type: "leave",
         roomId: roomInput.value.trim(),
-        peerId: peerId ?? "",
+        peerId,
       });
     }
     signaling.disconnect();
@@ -147,11 +161,7 @@ function disconnect(): void {
     viewerPeer = null;
   }
 
-  if (remoteVideo.srcObject) {
-    remoteVideo.srcObject = null;
-  }
-  remoteVideo.classList.remove("active");
-  videoPlaceholder.classList.remove("hidden");
+  cleanupVideo();
 
   peerId = null;
   setStatus("未连接", "disconnected");

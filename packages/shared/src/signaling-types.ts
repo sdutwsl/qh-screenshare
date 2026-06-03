@@ -29,6 +29,12 @@ export interface ViewerJoinedMessage extends BaseMessage {
   viewerPeerId: string;
 }
 
+export interface ViewerAcceptedMessage extends BaseMessage {
+  type: "viewer-accepted";
+  roomId: string;
+  viewerPeerId: string;
+}
+
 export interface OfferMessage extends BaseMessage {
   type: "offer";
   roomId: string;
@@ -70,6 +76,7 @@ export type SignalMessage =
   | RoomCreatedMessage
   | JoinRoomMessage
   | ViewerJoinedMessage
+  | ViewerAcceptedMessage
   | OfferMessage
   | AnswerMessage
   | IceCandidateMessage
