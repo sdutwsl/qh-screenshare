@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain } from "electron";
+import { app, BrowserWindow, ipcMain, session, desktopCapturer } from "electron";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -36,6 +36,12 @@ function createWindow(): void {
 
 app.whenReady().then(() => {
   createWindow();
+
+  session.defaultSession.setDisplayMediaRequestHandler((_request, callback) => {
+    desktopCapturer.getSources({ types: ["screen", "window"] }).then((sources) => {
+      callback({ video: sources[0] });
+    });
+  });
 
   ipcMain.handle("get-runtime-info", () => {
     return {

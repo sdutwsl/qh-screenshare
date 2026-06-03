@@ -1,93 +1,117 @@
-# TODO: 当前剩余优化项
+# TODO: 当前剩余任务
 
 检查日期：2026-06-03
 
 ## 当前结论
 
-上一轮列出的主要工程阻塞已经基本修复：类型检查、lint、测试、生产构建均已通过；signaling server 健康检查可用；create-room、join-room、viewer-joined、offer、answer 的 WebSocket 转发链路可模拟跑通。
+P0/P1 中的主要代码问题已经修复并通过验证：
 
-仍建议继续优化的重点集中在连接生命周期、错误展示、真实 Electron/UOS 端到端验证。
+- [x] Host 异常断开时，Viewer 能收到 `leave`。
+- [x] Host 信令错误提示不会再被 `stopSharing()` 清掉。
+- [x] Viewer 收到 host `leave` 后会清理 video / PeerConnection / signaling。
+- [x] Viewer 收到 signaling error 后会统一清理 UI 和底层资源。
+- [x] Host ICE failed / disconnected 后会关闭对应 viewer PeerConnection 并更新 viewer 数量。
 
-## 已验证通过
+已执行验证：
 
 - [x] `pnpm typecheck` 通过。
 - [x] `pnpm lint` 通过。
-- [x] `pnpm test` 通过：5 个 test files，30 个 tests。
+- [x] `pnpm test` 通过：5 个 test files，31 个 tests。
 - [x] `pnpm build` 通过。
 - [x] `GET /healthz` 返回 `{"ok":true}`。
 - [x] WebSocket 模拟验证通过：`create-room`、`join-room`、`viewer-joined`、`offer`、`answer`。
-- [x] WebSocket 错误房间验证通过：不存在房间返回 `ROOM_NOT_FOUND`。
-- [x] WebSocket 超大消息验证通过：超限消息返回 `MESSAGE_TOO_LARGE`。
-- [x] `pnpm dev:viewer` 可启动，viewer 首页可正常返回 HTML。
+- [x] WebSocket 生命周期模拟通过：host socket close 后 viewer 收到 `leave`，`leave.peerId === host-test`。
 
-## P0: 会影响最小验收的剩余问题
+说明：本 TODO 主要记录可通过代码、脚本、自动化测试和文档更新推进的事项。需要目标桌面环境验证的内容，统一记录到 `docs/uos-test-matrix.md`，由实际测试时填写结果。
 
-- [ ] 修复 host 异常断开时 viewer 收不到 `leave` 的问题。
-  - 复现：WebSocket 模拟中 host socket close 后，viewer 等待 `leave` 超时。
-  - 原因：`removePeer()` 里 host 离开时先调用 `destroyRoom()` 删除 room，之后 `cleanupPeer()` 再 `sendToPeer()`，此时 viewer 已经无法从 roomMap 中找到。
-  - 相关代码：
-    - `apps/signaling-server/src/rooms.ts`：`removePeer()` host 分支先 `destroyRoom(roomId)`。
-    - `apps/signaling-server/src/index.ts`：`cleanupPeer()` 在 `result.wasHost` 后遍历 viewer ids 再发送 `leave`。
-  - 建议：在销毁 room 前拿到 viewer WebSocket 并先广播 `leave` / `room-closed`，或让 `removePeer()` 返回可发送的 viewer sockets，再删除 room。
-  - 建议补测试：新增 signaling lifecycle 测试，覆盖 host close 后 viewer 收到 `leave`。
+## P0: 可执行任务
 
-## P1: 连接生命周期和 UI 体验优化
-
-- [ ] 保留 Host 的信令错误提示，不要被 `stopSharing()` 清掉。
-  - 现状：Host 在 signaling `disconnected` / `error` 分支中先 `showError()`，随后调用 `stopSharing()`；`stopSharing()` 会重置状态并 `hideError()`。
-  - 影响：WebSocket 连接失败或断开时，用户可能看不到刚刚产生的错误。
-  - 建议：给 `stopSharing()` 增加选项，例如 `stopSharing({ keepError: true, statusText: "信令断开" })`；或拆分资源释放函数和 UI 重置函数。
-
-- [ ] Viewer 收到 host `leave` 后同时关闭 signaling socket。
-  - 现状：`ViewerPeer` 收到 `leave` 后触发 `onDisconnected()` 并关闭 PeerConnection，但 `signaling` 仍可能保持连接。
-  - 影响：Host 停止共享后 Viewer UI 已回到未连接，但底层 WebSocket 可能残留；用户再次连接会创建新的 signaling client。
-  - 建议：`onDisconnected()` 里复用 `disconnect()`，或新增只清理 socket 且不发送 leave 的 `disconnect({ notify: false })`。
-
-- [ ] Viewer 连接错误后同步恢复 UI 和底层资源。
-  - 现状：收到 signaling `error` 消息时会显示错误和状态，但未统一调用 `viewerPeer.close()` / `cleanupVideo()` / socket 断开。
-  - 建议：房间不存在、目标 peer 不存在、WebRTC offer 失败时，都走统一清理路径，确保按钮、视频、PeerConnection、WebSocket 状态一致。
-
-- [ ] Host ICE 失败后考虑关闭对应 viewer 的 PeerConnection 并更新 viewer 数量。
-  - 现状：Host 已把 ICE failed/disconnected 展示到 UI，但对应 viewer 连接仍留在 `viewers` map 中。
-  - 建议：ICE failed 时关闭该 viewer connection，并触发 `onViewerLeft()` 或单独显示“连接失败的 viewer”。
-
-## P2: 工程质量和可维护性优化
-
-- [ ] 给 host 断开通知、viewer 清理路径补自动化测试。
-  - 建议新增测试覆盖：
+- [ ] 将 WebSocket 生命周期模拟固化为自动化测试。
+  - 目标：把本次手工 Node 脚本验证迁移成可重复执行的测试，而不是依赖临时命令。
+  - 覆盖场景：
+    - host 创建 room。
+    - viewer 加入 room。
+    - host 收到 `viewer-joined`。
+    - offer 转发到 viewer。
+    - answer 转发到 host。
     - host socket close 后 viewer 收到 `leave`。
-    - viewer 收到 `leave` 后 video/PeerConnection/signaling 状态清理。
-    - signaling error 后 Host 不隐藏错误提示。
+  - 建议位置：`apps/signaling-server/src/*.test.ts`。
+  - 验收命令：`pnpm test`。
+
+- [ ] 为 Viewer 清理路径补可测试的纯逻辑或轻量 DOM 测试。
+  - 当前 Viewer 资源清理逻辑在 `apps/viewer/src/main.ts` 中，主要依赖 DOM 和 WebSocket 实例。
+  - 建议抽出可单测的状态转换/清理 helper，或用 jsdom 覆盖以下行为：
+    - 收到 signaling `error` 后按钮恢复、错误保留、视频占位恢复。
+    - 收到 host `leave` 后 video 清空、PeerConnection close、signaling disconnect。
+  - 验收命令：`pnpm test`。
+
+- [ ] 为 Host 错误保留行为补自动化覆盖。
+  - 当前 Host 在 signaling `disconnected` / `error` 时调用 `stopSharing({ keepError: true })`。
+  - 建议抽出可测 helper 或用轻量 DOM 测试覆盖：
+    - 信令断开后错误区域仍可见。
+    - 状态显示为错误。
+    - 本地 stream tracks 被 stop。
+    - room 信息和 viewer 数量被清理。
+  - 验收命令：`pnpm test`。
+
+## P1: 工程质量
 
 - [ ] 清理或压制 Host 构建警告。
-  - 当前 `pnpm build` 通过，但有 Vite 警告：`new URL(".", import.meta.url) doesn't exist at build time`。
-  - 建议：如果这是预期行为，按 Vite 建议加 `/* @vite-ignore */`；或改用更稳定的 runtime 路径计算方式。
+  - 当前 `pnpm build` 通过，但 Host main 构建仍有 Vite warning：
+    - `new URL(".", import.meta.url) doesn't exist at build time`
+  - 建议：
+    - 如果这是预期行为，按 Vite 建议加 `/* @vite-ignore */`。
+    - 或改用更稳定的 runtime 路径计算方式。
+  - 验收命令：`pnpm build` 不再出现该 warning。
 
-- [ ] 把当前环境依赖问题补进 `docs/troubleshooting.md`。
-  - 建议记录 Electron Linux 常见依赖，例如 `libgobject-2.0.so.0` 所属系统包。
-  - 建议记录 BusyBox `ps` 与 `vite-plugin-electron` 的兼容问题，提示安装完整 `procps`。
+- [ ] 检查 Electron main/preload 的 ESM 运行兼容性并形成明确结论。
+  - 当前在 NixOS 环境下曾出现 Electron runtime 对 `electron` named export 不兼容的问题；这可能与 NixOS/npm Electron 二进制环境有关。
+  - 保持 `pnpm typecheck`、`pnpm build` 通过。
+  - 在 `docs/troubleshooting.md` 记录 NixOS 环境限制和建议的常规 Linux / UOS 验证方式。
+  - 不要把“已在 NixOS 成功启动 Electron Host”写入结论，除非真的有可复现命令和输出。
 
-- [ ] 在 `docs/uos-test-matrix.md` 写入真实测试结果。
-  - 目前模板已存在，但还没有真实 UOS/X11/Wayland 测试记录。
-  - 建议至少记录：
-    - UOS + X11 + 单屏。
-    - UOS + X11 + 多屏。
-    - UOS + Wayland + 单屏。
-    - UOS + Wayland + 多屏。
-    - 100% / 125% / 150% 缩放。
+- [ ] 更新 `docs/troubleshooting.md` 的 NixOS / Electron 说明。
+  - 建议记录：
+    - NixOS 上 npm Electron 二进制可能缺少动态库，需要 dev shell / FHS 环境。
+    - `ps --no-headers` 需要 GNU `procps`，BusyBox `ps` 不兼容。
+    - 若 `electron` npm 包没有下载二进制，需在 dev shell 内重新安装依赖或运行 Electron install 脚本。
+    - NixOS 上不能替代 UOS/Deepin 的真实验收。
 
-## 已基本完成的 PROJECT.md 项
+- [ ] 更新 `docs/uos-test-matrix.md`，添加目标环境验收清单。
+  - 只维护表格和步骤，未实际执行的结果保持空白。
+  - 建议保留待人工填写字段：
+    - 是否能打开 Host。
+    - 是否能弹出屏幕选择器。
+    - 是否能共享整个屏幕。
+    - 是否能共享窗口。
+    - Viewer 是否能播放。
+    - Host 停止共享后 Viewer 是否断开。
+    - 用户取消授权后是否可再次开始共享。
 
-- [x] 仓库主体结构符合 `PROJECT.md`。
-- [x] Electron BrowserWindow 安全默认值已配置：`contextIsolation`、`nodeIntegration: false`、`sandbox`、`preload`。
-- [x] Host 使用标准 `navigator.mediaDevices.getDisplayMedia({ video, audio: false })`。
-- [x] Viewer 不请求本地摄像头、麦克风或屏幕权限。
-- [x] 视频数据走 WebRTC，不走 WebSocket。
-- [x] signaling server 提供 `/healthz`。
-- [x] signaling server 支持 create-room、join-room、offer、answer、ice-candidate、leave 基础协议。
-- [x] `peerId` 主链路已统一为客户端上报并由服务端沿用。
-- [x] Host 和 Viewer 已接入 Vite env 配置。
-- [x] ICE servers 已支持 Vite env 解析并保留默认 STUN。
-- [x] `SignalingClient` 已避免重复追加 `/ws`。
-- [x] roomId 创建已避免覆盖已有 room。
-- [x] `docs/uos-test-matrix.md` 和 `docs/troubleshooting.md` 已创建。
+## P2: 可选优化
+
+- [ ] 去重 Host / Viewer 的 ICE server 解析逻辑。
+  - 当前 Host 和 Viewer 各自解析 `VITE_RTC_ICE_SERVERS` / `VITE_ICE_SERVERS`。
+  - 建议抽到 shared 或 renderer 公共 helper，避免配置解析行为分叉。
+  - 验收命令：`pnpm typecheck && pnpm test && pnpm build`。
+
+- [ ] 给 signaling room lifecycle 增加更多边界测试。
+  - 建议覆盖：
+    - host 重复 create-room 返回 `ALREADY_IN_ROOM`。
+    - viewer 重复 join-room 返回 `ALREADY_IN_ROOM`。
+    - target peer 不存在时返回 `PEER_NOT_FOUND`。
+    - room 满员后返回 `ROOM_FULL`。
+  - 验收命令：`pnpm test`。
+
+- [ ] 检查 TODO/README/PROJECT 三者描述是否一致。
+  - README 中不要声称已经通过真实 UOS 端到端测试。
+  - PROJECT 是目标说明，TODO 是当前剩余任务，二者角色应保持清晰。
+
+## 目标环境验收项
+
+- [ ] UOS/Deepin 实体机或虚拟机上的真实屏幕共享验收。
+- [ ] Wayland 下 portal / PipeWire 授权弹窗真实表现。
+- [ ] Viewer 实际播放 Host 屏幕画面。
+- [ ] 多屏、缩放比例、窗口共享等桌面环境相关结果。
+
+这些事项需要在目标系统上执行，并把结果填写到 `docs/uos-test-matrix.md`。
