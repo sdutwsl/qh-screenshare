@@ -136,8 +136,12 @@ export class HostPeer {
       logger.debug(`ICE state [${viewerPeerId}]: ${state}`, {
         roomId: this.roomId,
       });
-      if (state === "disconnected" || state === "failed") {
-        this.callbacks.onStatusChange(`ICE连接${state === "failed" ? "失败" : "断开"}`);
+      if (state === "failed") {
+        this.callbacks.onError("ICE_FAILED", `与观看端 ${viewerPeerId} 的ICE连接失败`);
+        this.removeViewer(viewerPeerId);
+      } else if (state === "disconnected") {
+        this.callbacks.onStatusChange(`ICE连接断开`);
+        this.removeViewer(viewerPeerId);
       }
     };
 

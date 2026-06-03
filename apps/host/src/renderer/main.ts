@@ -165,14 +165,12 @@ async function startSharing(): Promise<void> {
 
       case "disconnected":
         showError("信令服务器连接断开");
-        setStatus("信令断开", "error");
-        stopSharing();
+        stopSharing({ keepError: true, statusText: "信令断开", statusType: "error" });
         break;
 
       case "error":
         showError(event.message);
-        setStatus("错误", "error");
-        stopSharing();
+        stopSharing({ keepError: true, statusText: "错误", statusType: "error" });
         break;
 
       case "message":
@@ -236,7 +234,7 @@ function handleRoomCreated(roomId: string): void {
   stopBtn.disabled = false;
 }
 
-function stopSharing(): void {
+function stopSharing(opts?: { keepError?: boolean; statusText?: string; statusType?: "connected" | "disconnected" | "error" }): void {
   if (signaling) {
     signaling.send({
       type: "leave",
@@ -269,10 +267,14 @@ function stopSharing(): void {
   viewerCountDisplay.textContent = "0";
   roomInfoBox.classList.add("hidden");
 
-  setStatus("未共享", "disconnected");
+  const statusText = opts?.statusText ?? "未共享";
+  const statusType = opts?.statusType ?? "disconnected";
+  setStatus(statusText, statusType);
   stateManager.setState({ isSharing: false, roomId: null, viewerCount: 0 });
 
-  hideError();
+  if (!opts?.keepError) {
+    hideError();
+  }
 
   startBtn.disabled = false;
   startBtn.classList.remove("hidden");

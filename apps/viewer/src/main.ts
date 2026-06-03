@@ -43,6 +43,22 @@ function cleanupVideo(): void {
   videoPlaceholder.classList.remove("hidden");
 }
 
+function cleanupResources(keepError: boolean = false): void {
+  if (viewerPeer) {
+    viewerPeer.close();
+    viewerPeer = null;
+  }
+  if (signaling) {
+    signaling.disconnect();
+    signaling = null;
+  }
+  cleanupVideo();
+  if (!keepError) {
+    hideError();
+  }
+  updateUI(false);
+}
+
 function getSignalingUrl(): string {
   const urlParams = new URLSearchParams(window.location.search);
   const serverFromParam = urlParams.get("server");
@@ -92,19 +108,20 @@ async function startConnection(roomId: string): Promise<void> {
 
       case "disconnected":
         setStatus("已断开", "disconnected");
-        cleanupVideo();
-        updateUI(false);
+        cleanupResources(false);
         break;
 
       case "error":
         showError(event.message);
         setStatus("错误", "disconnected");
+        cleanupResources(true);
         break;
 
       case "message":
         if (event.message.type === "error") {
           showError(event.message.message);
           setStatus("错误", "disconnected");
+          cleanupResources(true);
         } else {
           viewerPeer?.handleSignal(event.message);
         }
@@ -130,6 +147,10 @@ async function startConnection(roomId: string): Promise<void> {
         cleanupVideo();
         setStatus("已断开", "disconnected");
         updateUI(false);
+        if (signaling) {
+          signaling.disconnect();
+          signaling = null;
+        }
       },
       onError: (code: string, message: string) => {
         showError(`[${code}] ${message}`);
@@ -152,21 +173,12 @@ function disconnect(): void {
         peerId,
       });
     }
-    signaling.disconnect();
-    signaling = null;
   }
 
-  if (viewerPeer) {
-    viewerPeer.close();
-    viewerPeer = null;
-  }
-
-  cleanupVideo();
+  cleanupResources(false);
 
   peerId = null;
   setStatus("未连接", "disconnected");
-  hideError();
-  updateUI(false);
 }
 
 function updateUI(connected: boolean): void {
