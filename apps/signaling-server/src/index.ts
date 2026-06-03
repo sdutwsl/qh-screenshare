@@ -1,5 +1,8 @@
 import { createServer } from "node:http";
 import { WebSocketServer, WebSocket } from "ws";
+import { readFileSync } from "node:fs";
+import { resolve, dirname } from "node:path";
+import { fileURLToPath } from "node:url";
 import { logger, SIGNALING_PATH, HEALTHZ_PATH } from "@uos/shared";
 import { validateMessage, isValidWebSocketMessage } from "./protocol";
 import {
@@ -12,6 +15,29 @@ import {
   sendToRoomExcept,
   sendToPeer,
 } from "./rooms";
+
+function loadEnvFile(): void {
+  try {
+    const rootDir = resolve(dirname(fileURLToPath(import.meta.url)), "../../..");
+    const envPath = resolve(rootDir, ".env");
+    const content = readFileSync(envPath, "utf-8");
+    for (const line of content.split("\n")) {
+      const trimmed = line.trim();
+      if (!trimmed || trimmed.startsWith("#")) continue;
+      const eqIdx = trimmed.indexOf("=");
+      if (eqIdx === -1) continue;
+      const key = trimmed.slice(0, eqIdx).trim();
+      const value = trimmed.slice(eqIdx + 1).trim();
+      if (!process.env[key]) {
+        process.env[key] = value;
+      }
+    }
+  } catch {
+    // .env file is optional
+  }
+}
+
+loadEnvFile();
 
 const PORT = Number(process.env.SIGNALING_PORT) || Number(process.env.PORT) || 3000;
 const WS_PATH = process.env.SIGNALING_PATH || SIGNALING_PATH;

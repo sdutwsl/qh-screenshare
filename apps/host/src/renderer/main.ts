@@ -21,8 +21,8 @@ declare global {
   }
 }
 
-const DEFAULT_SIGNALING_URL = "ws://localhost:3000";
-const VIEWER_PUBLIC_URL = "http://localhost:5174";
+const DEFAULT_SIGNALING_URL = import.meta.env.VITE_SIGNALING_URL || "ws://localhost:3000";
+const VIEWER_PUBLIC_URL = import.meta.env.VITE_VIEWER_PUBLIC_URL || "http://localhost:5174";
 
 let signaling: SignalingClient | null = null;
 let hostPeer: HostPeer | null = null;

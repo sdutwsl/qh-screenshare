@@ -20,7 +20,11 @@ export class SignalingClient {
 
   constructor(serverUrl: string) {
     const wsUrl = serverUrl.replace(/^http/, "ws").replace(/\/$/, "");
-    this.url = `${wsUrl}${SIGNALING_PATH}`;
+    if (wsUrl.endsWith(SIGNALING_PATH)) {
+      this.url = wsUrl;
+    } else {
+      this.url = `${wsUrl}${SIGNALING_PATH}`;
+    }
   }
 
   connect(peerId: string): void {
