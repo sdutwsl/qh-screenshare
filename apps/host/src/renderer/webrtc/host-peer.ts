@@ -19,6 +19,28 @@ interface ViewerConnection {
 }
 
 function parseIceServers(): RtcConfig {
+  try {
+    const envVal = import.meta.env.VITE_RTC_ICE_SERVERS;
+    if (envVal) {
+      const parsed = JSON.parse(envVal);
+      if (parsed && Array.isArray(parsed)) {
+        return { iceServers: parsed };
+      }
+    }
+  } catch {
+    // fall through to default
+  }
+  try {
+    const envVal = import.meta.env.VITE_ICE_SERVERS;
+    if (envVal) {
+      const parsed = JSON.parse(envVal);
+      if (parsed && Array.isArray(parsed)) {
+        return { iceServers: parsed };
+      }
+    }
+  } catch {
+    // fall through to default
+  }
   return { ...DEFAULT_RTC_CONFIG };
 }
 
