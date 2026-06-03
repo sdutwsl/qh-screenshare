@@ -1,0 +1,28 @@
+{
+  "root": true,
+  "parser": "@typescript-eslint/parser",
+  "parserOptions": {
+    "ecmaVersion": "latest",
+    "sourceType": "module",
+    "project": [
+      "./tsconfig.base.json",
+      "./packages/shared/tsconfig.json",
+      "./apps/signaling-server/tsconfig.json",
+      "./apps/viewer/tsconfig.json",
+      "./apps/host/tsconfig.json",
+      "./apps/host/tsconfig.main.json"
+    ]
+  },
+  "plugins": ["@typescript-eslint"],
+  "extends": [
+    "eslint:recommended",
+    "plugin:@typescript-eslint/recommended"
+  ],
+  "rules": {
+    "@typescript-eslint/no-unused-vars": ["error", { "argsIgnorePattern": "^_" }],
+    "@typescript-eslint/explicit-function-return-type": "off",
+    "@typescript-eslint/no-explicit-any": "warn",
+    "no-console": ["warn", { "allow": ["warn", "error", "info", "debug"] }]
+  },
+  "ignorePatterns": ["**/dist/**", "**/node_modules/**", "*.js", "*.mjs", "*.cjs"]
+}
