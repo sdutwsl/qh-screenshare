@@ -1,0 +1,11 @@
+appId: com.uos.screen-share.viewer
+productName: UOS Screen Share Viewer
+directories:
+  output: release
+linux:
+  target:
+    - AppImage
+  category: Utility
+files:
+  - dist/**/*
+  - package.json

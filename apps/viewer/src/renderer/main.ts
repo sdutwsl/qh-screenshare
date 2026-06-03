@@ -2,7 +2,17 @@ import { randomUUID } from "@uos/shared";
 import { SignalingClient } from "./webrtc/signaling-client";
 import { ViewerPeer } from "./webrtc/viewer-peer";
 
-const DEFAULT_SIGNALING_URL = import.meta.env.VITE_SIGNALING_URL || "ws://localhost:3000";
+declare global {
+  interface Window {
+    viewerAPI?: {
+      getAppConfig: () => Promise<{
+        signalingUrl: string;
+      }>;
+    };
+  }
+}
+
+let signalingUrl = "ws://localhost:3000";
 
 let signaling: SignalingClient | null = null;
 let viewerPeer: ViewerPeer | null = null;
@@ -65,7 +75,18 @@ function getSignalingUrl(): string {
   if (serverFromParam) {
     return serverFromParam.replace(/^http/, "ws");
   }
-  return DEFAULT_SIGNALING_URL.replace(/^http/, "ws");
+  return signalingUrl.replace(/^http/, "ws");
+}
+
+async function loadConfig(): Promise<void> {
+  if (window.viewerAPI) {
+    try {
+      const config = await window.viewerAPI.getAppConfig();
+      signalingUrl = config.signalingUrl;
+    } catch {
+      // keep default
+    }
+  }
 }
 
 connectBtn.addEventListener("click", () => {
@@ -200,3 +221,5 @@ const queryRoom = getRoomIdFromQuery();
 if (queryRoom) {
   roomInput.value = queryRoom;
 }
+
+loadConfig();
