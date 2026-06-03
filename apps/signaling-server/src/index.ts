@@ -3,7 +3,7 @@ import { WebSocketServer, WebSocket } from "ws";
 import { readFileSync } from "node:fs";
 import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
-import { logger, SIGNALING_PATH, HEALTHZ_PATH } from "@uos/shared";
+import { logger, SIGNALING_PATH, HEALTHZ_PATH, setLogFormat } from "@uos/shared";
 import { validateMessage, isValidWebSocketMessage } from "./protocol";
 import {
   createRoom,
@@ -37,6 +37,10 @@ function loadEnvFile(): void {
 }
 
 loadEnvFile();
+
+if (process.env.LOG_FORMAT === "json" || !process.env.LOG_FORMAT) {
+  setLogFormat("json");
+}
 
 const PORT = Number(process.env.SIGNALING_PORT) || Number(process.env.PORT) || 3000;
 const WS_PATH = process.env.SIGNALING_PATH || SIGNALING_PATH;

@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from "vitest";
-import { createRoom, addViewerToRoom, removePeer, getRoom, getMaxViewers, destroyRoom, getHostPeerId, getViewerPeerIds, cleanOrphanRooms, clearAllRooms } from "../src/rooms";
+import { createRoom, addViewerToRoom, removePeer, getRoom, getHostPeerId, getViewerPeerIds, clearAllRooms } from "../src/rooms";
 import type { WebSocket } from "ws";
 
 function createMockWs(): WebSocket {
