@@ -1,91 +1,93 @@
-# TODO: PROJECT.md 实现差距
+# TODO: 当前剩余优化项
 
 检查日期：2026-06-03
 
 ## 当前结论
 
-项目已经搭起 Electron Host、Browser Viewer、WebSocket signaling server、共享协议类型、基础 UI、UOS 诊断信息和排障文档，但尚未达到 `PROJECT.md` 的最小验收标准。主要阻塞点是 WebRTC peerId 协议不一致、Host 构建失败，以及 lint/test 命令不可用。
+上一轮列出的主要工程阻塞已经基本修复：类型检查、lint、测试、生产构建均已通过；signaling server 健康检查可用；create-room、join-room、viewer-joined、offer、answer 的 WebSocket 转发链路可模拟跑通。
 
-已执行验证：
+仍建议继续优化的重点集中在连接生命周期、错误展示、真实 Electron/UOS 端到端验证。
+
+## 已验证通过
 
 - [x] `pnpm typecheck` 通过。
-- [ ] `pnpm build` 失败：Host 的 Vite/Electron entry 被解析为 `src/renderer/src/main/main.ts`。
-- [ ] `pnpm lint` 失败：缺少 TypeScript ESLint 配置，ESLint 按默认 JS parser 解析 `.ts`。
-- [ ] `pnpm test` 失败：没有任何 `*.test.ts` / `*.spec.ts` 文件，Vitest 以 code 1 退出。
+- [x] `pnpm lint` 通过。
+- [x] `pnpm test` 通过：5 个 test files，30 个 tests。
+- [x] `pnpm build` 通过。
+- [x] `GET /healthz` 返回 `{"ok":true}`。
+- [x] WebSocket 模拟验证通过：`create-room`、`join-room`、`viewer-joined`、`offer`、`answer`。
+- [x] WebSocket 错误房间验证通过：不存在房间返回 `ROOM_NOT_FOUND`。
+- [x] WebSocket 超大消息验证通过：超限消息返回 `MESSAGE_TOO_LARGE`。
+- [x] `pnpm dev:viewer` 可启动，viewer 首页可正常返回 HTML。
 
-## P0: 阻塞最小验收
+## P0: 会影响最小验收的剩余问题
 
-- [ ] 修复客户端和服务端 `peerId` 来源不一致，当前会导致 offer/answer/ICE 被客户端忽略。
-  - 现状：Host 和 Viewer 在客户端用 `randomUUID()` 生成本地 `peerId`，见 `apps/host/src/renderer/main.ts:143`、`apps/viewer/src/main.ts:71`。
-  - 现状：signaling server 又在连接时生成自己的 `peerId`，并在转发 offer/answer/ICE 时覆盖 `fromPeerId`，见 `apps/signaling-server/src/index.ts:34`、`apps/signaling-server/src/index.ts:144`。
-  - 影响：Viewer 收到 offer 时检查 `msg.toPeerId === this.peerId`，但 `toPeerId` 是服务端 viewer id，本地 `this.peerId` 是客户端随机 id，见 `apps/viewer/src/webrtc/viewer-peer.ts:43`。Host 收到 answer/ICE 也有同类问题，见 `apps/host/src/renderer/webrtc/host-peer.ts:66`、`apps/host/src/renderer/webrtc/host-peer.ts:73`。
-  - 建议：统一使用服务端分配的 peerId，并让 Host 使用 `room-created.hostPeerId`；Viewer 加房后需要收到自己的 `viewerPeerId`，或改为服务端信任客户端上报的 `peerId`。
+- [ ] 修复 host 异常断开时 viewer 收不到 `leave` 的问题。
+  - 复现：WebSocket 模拟中 host socket close 后，viewer 等待 `leave` 超时。
+  - 原因：`removePeer()` 里 host 离开时先调用 `destroyRoom()` 删除 room，之后 `cleanupPeer()` 再 `sendToPeer()`，此时 viewer 已经无法从 roomMap 中找到。
+  - 相关代码：
+    - `apps/signaling-server/src/rooms.ts`：`removePeer()` host 分支先 `destroyRoom(roomId)`。
+    - `apps/signaling-server/src/index.ts`：`cleanupPeer()` 在 `result.wasHost` 后遍历 viewer ids 再发送 `leave`。
+  - 建议：在销毁 room 前拿到 viewer WebSocket 并先广播 `leave` / `room-closed`，或让 `removePeer()` 返回可发送的 viewer sockets，再删除 room。
+  - 建议补测试：新增 signaling lifecycle 测试，覆盖 host close 后 viewer 收到 `leave`。
 
-- [ ] 修复 Host 构建失败。
-  - 现状：`apps/host/vite.config.ts:7` 设置 `root: "src/renderer"`，但 electron plugin entry 使用 `src/main/main.ts` 和 `src/preload/preload.ts`，见 `apps/host/vite.config.ts:20`、`apps/host/vite.config.ts:36`。
-  - 影响：`pnpm build` 报错 `Could not resolve entry module "src/renderer/src/main/main.ts"`。
-  - 建议：调整 electron entry 为相对正确路径，或拆分 renderer/main/preload 构建配置。
+## P1: 连接生命周期和 UI 体验优化
 
-- [ ] 修复 Host 停止共享后 Viewer 侧播放状态和资源释放。
-  - 现状：Viewer 收到 `leave` 只调用 `ViewerPeer.close()`，不会清空 `remoteVideo.srcObject`、隐藏视频或显示占位，见 `apps/viewer/src/webrtc/viewer-peer.ts:57`、`apps/viewer/src/main.ts:108`。
-  - 现状：WebSocket `disconnected` 事件只更新按钮和状态，不关闭 peer 或清空 video，见 `apps/viewer/src/main.ts:84`。
-  - 验收目标：Host 点击“停止共享”后，Viewer 停止播放并显示连接已断开。
+- [ ] 保留 Host 的信令错误提示，不要被 `stopSharing()` 清掉。
+  - 现状：Host 在 signaling `disconnected` / `error` 分支中先 `showError()`，随后调用 `stopSharing()`；`stopSharing()` 会重置状态并 `hideError()`。
+  - 影响：WebSocket 连接失败或断开时，用户可能看不到刚刚产生的错误。
+  - 建议：给 `stopSharing()` 增加选项，例如 `stopSharing({ keepError: true, statusText: "信令断开" })`；或拆分资源释放函数和 UI 重置函数。
 
-## P1: 补齐 PROJECT.md 明确要求
+- [ ] Viewer 收到 host `leave` 后同时关闭 signaling socket。
+  - 现状：`ViewerPeer` 收到 `leave` 后触发 `onDisconnected()` 并关闭 PeerConnection，但 `signaling` 仍可能保持连接。
+  - 影响：Host 停止共享后 Viewer UI 已回到未连接，但底层 WebSocket 可能残留；用户再次连接会创建新的 signaling client。
+  - 建议：`onDisconnected()` 里复用 `disconnect()`，或新增只清理 socket 且不发送 leave 的 `disconnect({ notify: false })`。
 
-- [ ] 让 Host 和 Viewer 真正支持 `.env` / 配置项。
-  - Host 现在硬编码 `DEFAULT_SIGNALING_URL` 和 `VIEWER_PUBLIC_URL`，见 `apps/host/src/renderer/main.ts:24`。
-  - Viewer 使用 `import.meta.env.VITE_SIGNALING_URL`，但根 `.env` 写的是 `SIGNALING_WS_URL`，见 `apps/viewer/src/main.ts:5`、`.env:2`。
-  - signaling server 使用 `process.env`，但当前启动脚本没有显式加载 `.env`。
-  - `SignalingClient` 会无条件追加 `/ws`，如果配置值已经是 `ws://host:3000/ws` 会变成 `/ws/ws`，见 `apps/host/src/renderer/webrtc/signaling-client.ts:21`、`apps/viewer/src/webrtc/signaling-client.ts:21`。
+- [ ] Viewer 连接错误后同步恢复 UI 和底层资源。
+  - 现状：收到 signaling `error` 消息时会显示错误和状态，但未统一调用 `viewerPeer.close()` / `cleanupVideo()` / socket 断开。
+  - 建议：房间不存在、目标 peer 不存在、WebRTC offer 失败时，都走统一清理路径，确保按钮、视频、PeerConnection、WebSocket 状态一致。
 
-- [ ] 实现可配置 ICE servers。
-  - 现状：Host 和 Viewer 的 `parseIceServers()` 都只返回 `DEFAULT_RTC_CONFIG`，没有解析 `RTC_ICE_SERVERS` 或配置文件，见 `apps/host/src/renderer/webrtc/host-peer.ts:21`、`apps/viewer/src/webrtc/viewer-peer.ts:14`。
-  - 验收目标：配置优先级满足“环境变量 -> 配置文件 -> 默认 STUN”，并保留 TURN 扩展格式。
+- [ ] Host ICE 失败后考虑关闭对应 viewer 的 PeerConnection 并更新 viewer 数量。
+  - 现状：Host 已把 ICE failed/disconnected 展示到 UI，但对应 viewer 连接仍留在 `viewers` map 中。
+  - 建议：ICE failed 时关闭该 viewer connection，并触发 `onViewerLeft()` 或单独显示“连接失败的 viewer”。
 
-- [ ] 修复局域网/自定义 signaling server 支持。
-  - Host CSP 只允许 `ws://localhost:*` 和 `wss://localhost:*`，会阻止连接局域网 IP 或自定义域名，见 `apps/host/src/renderer/index.html:8`。
-  - Host UI 未显示“信令服务器：...”字段，不符合 Host 首页 UI 示例。
+## P2: 工程质量和可维护性优化
 
-- [ ] 补齐错误处理并全部展示到 UI。
-  - Host 未显式处理 `navigator.mediaDevices.getDisplayMedia` 不存在。
-  - Host 在已拿到屏幕流后如果 WebSocket 连接失败，只显示错误，不会停止本地 track 或恢复 UI，见 `apps/host/src/renderer/main.ts:134`、`apps/host/src/renderer/main.ts:160`。
-  - Host ICE `failed` / `disconnected` 只写 debug log，没有展示给用户，见 `apps/host/src/renderer/webrtc/host-peer.ts:112`。
-  - Viewer `handleOffer()` 没有 try/catch，`setRemoteDescription`、`createAnswer`、`setLocalDescription` 失败时可能成为未处理异常，见 `apps/viewer/src/webrtc/viewer-peer.ts:105`。
+- [ ] 给 host 断开通知、viewer 清理路径补自动化测试。
+  - 建议新增测试覆盖：
+    - host socket close 后 viewer 收到 `leave`。
+    - viewer 收到 `leave` 后 video/PeerConnection/signaling 状态清理。
+    - signaling error 后 Host 不隐藏错误提示。
 
-- [ ] 修复 signaling server 的消息大小限制。
-  - 现状：`ws` message handler 收到的是 `Buffer`，但 `isValidWebSocketMessage()` 只检查 string，见 `apps/signaling-server/src/index.ts:39`、`apps/signaling-server/src/protocol.ts:59`。
-  - 验收目标：超大 JSON 返回 `MESSAGE_TOO_LARGE`，服务不崩溃。
+- [ ] 清理或压制 Host 构建警告。
+  - 当前 `pnpm build` 通过，但有 Vite 警告：`new URL(".", import.meta.url) doesn't exist at build time`。
+  - 建议：如果这是预期行为，按 Vite 建议加 `/* @vite-ignore */`；或改用更稳定的 runtime 路径计算方式。
 
-- [ ] 避免 roomId 冲突。
-  - 现状：`generateRoomId()` 随机生成 6 位数字，`createRoom()` 没有检查是否已存在，可能覆盖已有 room，见 `packages/shared/src/room-id.ts:3`、`apps/signaling-server/src/rooms.ts:28`。
+- [ ] 把当前环境依赖问题补进 `docs/troubleshooting.md`。
+  - 建议记录 Electron Linux 常见依赖，例如 `libgobject-2.0.so.0` 所属系统包。
+  - 建议记录 BusyBox `ps` 与 `vite-plugin-electron` 的兼容问题，提示安装完整 `procps`。
 
-- [ ] 调整 host 断开生命周期通知。
-  - 现状：`removePeer()` 在 host 离开时先 `destroyRoom()` 并关闭 viewer socket，再返回一个空 viewers map，后续 `cleanupPeer()` 已无法向原 viewer 列表发送明确 `leave`，见 `apps/signaling-server/src/rooms.ts:68`、`apps/signaling-server/src/rooms.ts:87`、`apps/signaling-server/src/index.ts:171`。
-  - 建议：销毁 room 前先向原 viewers 广播 `leave` / `room-closed`，再关闭 socket 或允许 viewer 自行断开。
+- [ ] 在 `docs/uos-test-matrix.md` 写入真实测试结果。
+  - 目前模板已存在，但还没有真实 UOS/X11/Wayland 测试记录。
+  - 建议至少记录：
+    - UOS + X11 + 单屏。
+    - UOS + X11 + 多屏。
+    - UOS + Wayland + 单屏。
+    - UOS + Wayland + 多屏。
+    - 100% / 125% / 150% 缩放。
 
-## P2: 工程质量和验收覆盖
+## 已基本完成的 PROJECT.md 项
 
-- [ ] 增加 ESLint 配置。
-  - 当前 root `package.json:10` 有 `pnpm lint`，但仓库没有 `.eslintrc*` 或 `eslint.config.*`，导致所有 `.ts` 文件 parsing error。
-
-- [ ] 增加 Vitest 测试，至少覆盖非 WebRTC 核心逻辑。
-  - 建议优先覆盖 `generateRoomId()` / `isValidRoomId()`、`validateMessage()`、room 创建/加入/上限/清理、超大消息拒绝。
-  - 确保 `pnpm test` 在没有业务失败时返回 0。
-
-- [ ] 增加端到端或手动验收记录。
-  - `docs/uos-test-matrix.md` 已有模板，但还没有真实 UOS/X11/Wayland 测试结果。
-  - 最小场景需要记录：本机回环、局域网、用户取消授权、Viewer 加入不存在房间。
-
-- [ ] 日志格式进一步结构化。
-  - 当前 logger 有 timestamp、level、roomId、peerId，但不是 JSON 结构化日志。若按 `PROJECT.md` 严格要求“输出结构化日志”，建议输出单行 JSON 或提供可切换格式。
-
-## 已满足或基本满足的部分
-
-- [x] 仓库主体结构基本符合 `PROJECT.md`。
-- [x] Electron BrowserWindow 使用 `contextIsolation: true`、`nodeIntegration: false`、`sandbox: true`、`preload`。
-- [x] Host 通过标准 `navigator.mediaDevices.getDisplayMedia({ video, audio: false })` 采集屏幕。
+- [x] 仓库主体结构符合 `PROJECT.md`。
+- [x] Electron BrowserWindow 安全默认值已配置：`contextIsolation`、`nodeIntegration: false`、`sandbox`、`preload`。
+- [x] Host 使用标准 `navigator.mediaDevices.getDisplayMedia({ video, audio: false })`。
 - [x] Viewer 不请求本地摄像头、麦克风或屏幕权限。
-- [x] 视频数据没有通过 WebSocket 转发，代码路径是 WebRTC offer/answer/ICE。
-- [x] signaling server 有 `/healthz`，有 create-room、join-room、offer、answer、ice-candidate、leave 基础处理。
+- [x] 视频数据走 WebRTC，不走 WebSocket。
+- [x] signaling server 提供 `/healthz`。
+- [x] signaling server 支持 create-room、join-room、offer、answer、ice-candidate、leave 基础协议。
+- [x] `peerId` 主链路已统一为客户端上报并由服务端沿用。
+- [x] Host 和 Viewer 已接入 Vite env 配置。
+- [x] ICE servers 已支持 Vite env 解析并保留默认 STUN。
+- [x] `SignalingClient` 已避免重复追加 `/ws`。
+- [x] roomId 创建已避免覆盖已有 room。
 - [x] `docs/uos-test-matrix.md` 和 `docs/troubleshooting.md` 已创建。

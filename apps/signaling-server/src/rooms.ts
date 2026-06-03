@@ -78,7 +78,20 @@ export function removePeer(peerId: string): { roomId: string; viewerPeerIds: str
   for (const [roomId, room] of roomMap) {
     if (room.host?.peerId === peerId) {
       logger.info("Host left, destroying room", { roomId, peerId });
+
       const viewerIds = Array.from(room.viewers.keys());
+      const leaveMsg = {
+        type: "leave" as const,
+        roomId,
+        peerId,
+      };
+      for (const vId of viewerIds) {
+        const v = room.viewers.get(vId);
+        if (v && v.ws.readyState === 1) {
+          v.ws.send(JSON.stringify(leaveMsg));
+        }
+      }
+
       destroyRoom(roomId);
       return { roomId, viewerPeerIds: viewerIds, wasHost: true };
     }

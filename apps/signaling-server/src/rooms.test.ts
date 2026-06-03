@@ -10,6 +10,16 @@ function createMockWs(): WebSocket {
   } as unknown as WebSocket;
 }
 
+function createTrackingWs(): { ws: WebSocket; sentMessages: string[] } {
+  const sentMessages: string[] = [];
+  const ws = {
+    readyState: 1,
+    send: (msg: string) => { sentMessages.push(msg); },
+    close: () => {},
+  } as unknown as WebSocket;
+  return { ws, sentMessages };
+}
+
 describe("room management", () => {
   beforeEach(() => {
     clearAllRooms();
@@ -99,5 +109,19 @@ describe("room management", () => {
     expect(ids).toHaveLength(2);
     expect(ids).toContain("viewer-1");
     expect(ids).toContain("viewer-2");
+  });
+
+  it("should send leave message to viewers when host disconnects", () => {
+    const { ws: viewerWs, sentMessages } = createTrackingWs();
+    const room = createRoom(createMockWs(), "host-1");
+    addViewerToRoom(room.roomId, viewerWs, "viewer-1");
+
+    removePeer("host-1");
+
+    expect(sentMessages.length).toBe(1);
+    const msg = JSON.parse(sentMessages[0]);
+    expect(msg.type).toBe("leave");
+    expect(msg.roomId).toBe(room.roomId);
+    expect(msg.peerId).toBe("host-1");
   });
 });

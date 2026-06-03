@@ -194,19 +194,13 @@ wss.on("connection", (ws: WebSocket) => {
 
   function cleanupPeer(pid: string): void {
     const result = removePeer(pid);
-    if (result) {
+    if (result && !result.wasHost) {
       const leaveMsg = {
         type: "leave" as const,
         roomId: result.roomId,
         peerId: pid,
       };
-      if (result.wasHost) {
-        for (const vId of result.viewerPeerIds) {
-          sendToPeer(vId, leaveMsg);
-        }
-      } else {
-        sendToRoomExcept(result.roomId, pid, leaveMsg);
-      }
+      sendToRoomExcept(result.roomId, pid, leaveMsg);
     }
     boundRoomId = undefined;
     peerId = undefined;
