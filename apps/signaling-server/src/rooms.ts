@@ -26,7 +26,16 @@ export function getMaxViewers(): number {
 }
 
 export function createRoom(hostWs: WebSocket, hostPeerId: string): Room {
-  const roomId = generateRoomId();
+  let roomId = generateRoomId();
+  let attempts = 0;
+  const maxAttempts = 10;
+  while (roomMap.has(roomId) && attempts < maxAttempts) {
+    roomId = generateRoomId();
+    attempts++;
+  }
+  if (roomMap.has(roomId)) {
+    throw new Error("Unable to generate unique room ID");
+  }
   const room: Room = {
     roomId,
     host: { ws: hostWs, peerId: hostPeerId, role: "host" },
