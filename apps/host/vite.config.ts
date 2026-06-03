@@ -11,35 +11,35 @@ export default defineConfig({
   },
   resolve: {
     alias: {
-      "@uos/shared": resolve(__dirname, "../../packages/shared/src"),
+      "@uos/shared": resolve(import.meta.dirname!, "../../packages/shared/src"),
     },
   },
   plugins: [
     electron([
       {
-        entry: "src/main/main.ts",
+        entry: resolve(import.meta.dirname!, "src/main/main.ts"),
         vite: {
           build: {
-            outDir: "dist/main",
+            outDir: resolve(import.meta.dirname!, "dist/main"),
             rollupOptions: {
               external: ["electron"],
             },
           },
           resolve: {
             alias: {
-              "@uos/shared": resolve(__dirname, "../../packages/shared/src"),
+              "@uos/shared": resolve(import.meta.dirname!, "../../packages/shared/src"),
             },
           },
         },
       },
       {
-        entry: "src/preload/preload.ts",
+        entry: resolve(import.meta.dirname!, "src/preload/preload.ts"),
         onstart(options) {
           options.reload();
         },
         vite: {
           build: {
-            outDir: "dist/preload",
+            outDir: resolve(import.meta.dirname!, "dist/preload"),
             rollupOptions: {
               external: ["electron"],
             },
