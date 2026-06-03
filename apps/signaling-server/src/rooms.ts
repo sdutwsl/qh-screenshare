@@ -74,12 +74,13 @@ export function addViewerToRoom(
   return { success: true, viewerPeerId };
 }
 
-export function removePeer(peerId: string): Room | undefined {
+export function removePeer(peerId: string): { roomId: string; viewerPeerIds: string[]; wasHost: boolean } | undefined {
   for (const [roomId, room] of roomMap) {
     if (room.host?.peerId === peerId) {
       logger.info("Host left, destroying room", { roomId, peerId });
+      const viewerIds = Array.from(room.viewers.keys());
       destroyRoom(roomId);
-      return { roomId, host: null, viewers: new Map(), maxViewers: room.maxViewers };
+      return { roomId, viewerPeerIds: viewerIds, wasHost: true };
     }
     if (room.viewers.has(peerId)) {
       room.viewers.delete(peerId);
@@ -87,7 +88,7 @@ export function removePeer(peerId: string): Room | undefined {
       if (room.viewers.size === 0 && !room.host) {
         orphanTimestamps.set(roomId, Date.now());
       }
-      return room;
+      return { roomId, viewerPeerIds: [], wasHost: false };
     }
   }
   return undefined;
@@ -99,12 +100,6 @@ export function destroyRoom(roomId: string): void {
 
   if (room.host && room.host.ws.readyState === 1) {
     room.host.ws.close(1001, "Room destroyed");
-  }
-
-  for (const viewer of room.viewers.values()) {
-    if (viewer.ws.readyState === 1) {
-      viewer.ws.close(1001, "Room destroyed");
-    }
   }
 
   roomMap.delete(roomId);

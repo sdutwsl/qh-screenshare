@@ -11,7 +11,6 @@ import {
   removePeer,
   cleanOrphanRooms,
   getHostPeerId,
-  getViewerPeerIds,
   sendToRoomExcept,
   sendToPeer,
 } from "./rooms";
@@ -190,17 +189,19 @@ wss.on("connection", (ws: WebSocket) => {
   });
 
   function cleanupPeer(pid: string): void {
-    const room = removePeer(pid);
-    if (room) {
+    const result = removePeer(pid);
+    if (result) {
       const leaveMsg = {
         type: "leave" as const,
-        roomId: room.roomId,
+        roomId: result.roomId,
         peerId: pid,
       };
-      sendToRoomExcept(room.roomId, pid, leaveMsg);
-
-      for (const vId of getViewerPeerIds(room.roomId)) {
-        sendToPeer(vId, leaveMsg);
+      if (result.wasHost) {
+        for (const vId of result.viewerPeerIds) {
+          sendToPeer(vId, leaveMsg);
+        }
+      } else {
+        sendToRoomExcept(result.roomId, pid, leaveMsg);
       }
     }
     boundRoomId = undefined;
