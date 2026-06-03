@@ -1,0 +1,10 @@
+appId: com.uos.screen-share
+productName: UOS Screen Share
+directories:
+  output: release
+linux:
+  target:
+    - AppImage
+  category: Utility
+files:
+  - dist/**/*

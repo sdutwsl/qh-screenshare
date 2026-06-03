@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>UOS Screen Share Viewer</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div id="app">
+    <h1>UOS Screen Share Viewer</h1>
+
+    <div id="controls">
+      <label for="room-id-input">房间号：</label>
+      <input
+        type="text"
+        id="room-id-input"
+        maxlength="6"
+        placeholder="输入6位房间号"
+        autocomplete="off"
+      />
+      <button id="connect-btn">连接</button>
+      <button id="disconnect-btn" disabled>断开</button>
+    </div>
+
+    <div id="status-area">
+      状态：<span id="status-text">未连接</span>
+    </div>
+
+    <div id="error-area" class="error hidden"></div>
+
+    <div id="video-area">
+      <video
+        id="remote-video"
+        autoplay
+        playsinline
+        controls
+        muted
+      ></video>
+      <div id="video-placeholder" class="placeholder">等待视频流...</div>
+    </div>
+  </div>
+
+  <script type="module" src="main.ts"></script>
+</body>
+</html>

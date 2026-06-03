@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta
+    http-equiv="Content-Security-Policy"
+    content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; connect-src 'self' ws://localhost:* wss://localhost:*; media-src 'self' blob:;"
+  />
+  <title>UOS Screen Share</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div id="app">
+    <h1>UOS Screen Share</h1>
+
+    <div id="status-area">
+      状态：<span id="status-text" class="disconnected">未共享</span>
+    </div>
+
+    <div id="env-info" class="info-box">
+      <div>会话类型：<span id="env-session-type">检测中...</span></div>
+      <div>桌面环境：<span id="env-desktop">检测中...</span></div>
+      <div>显示服务：<span id="env-display">-</span></div>
+      <div>Wayland Display：<span id="env-wayland">-</span></div>
+    </div>
+
+    <div id="wayland-notice" class="warning-box hidden">
+      当前为 Wayland 会话，屏幕共享可能依赖系统选择器、PipeWire 和 xdg-desktop-portal。
+      如果无法共享，请确认系统屏幕共享权限和 portal 服务是否可用。
+    </div>
+
+    <div id="controls">
+      <button id="start-btn" class="primary">开始共享</button>
+      <button id="stop-btn" class="danger hidden">停止共享</button>
+    </div>
+
+    <div id="room-info" class="info-box hidden">
+      <div>房间号：<span id="room-id-display">-</span></div>
+      <div>观看地址：<span id="viewer-url">-</span></div>
+      <div>已连接观看端：<span id="viewer-count">0</span></div>
+    </div>
+
+    <div id="error-area" class="error hidden"></div>
+
+    <div id="preview-area" class="hidden">
+      <video
+        id="local-preview"
+        autoplay
+        playsinline
+        muted
+      ></video>
+      <div>本地预览</div>
+    </div>
+  </div>
+
+  <script type="module" src="main.ts"></script>
+</body>
+</html>
