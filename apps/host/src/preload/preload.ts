@@ -12,7 +12,14 @@ export interface RuntimeInfo {
   nodeVersion: string;
 }
 
+export interface AppConfig {
+  signalingUrl: string;
+  viewerPublicUrl: string;
+}
+
 contextBridge.exposeInMainWorld("hostAPI", {
   getRuntimeInfo: (): Promise<RuntimeInfo> =>
     ipcRenderer.invoke("get-runtime-info"),
+  getAppConfig: (): Promise<AppConfig> =>
+    ipcRenderer.invoke("get-app-config"),
 });

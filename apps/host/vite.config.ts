@@ -5,6 +5,7 @@ import { resolve } from "node:path";
 
 export default defineConfig({
   root: "src/renderer",
+  envDir: resolve(import.meta.dirname!, "../.."),
   build: {
     outDir: "../../dist/renderer",
     emptyOutDir: true,

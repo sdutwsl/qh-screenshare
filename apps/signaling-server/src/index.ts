@@ -211,7 +211,7 @@ setInterval(() => {
   cleanOrphanRooms();
 }, 60_000);
 
-server.listen(PORT, () => {
+server.listen(PORT, "0.0.0.0", () => {
   logger.info(`Signaling server started on port ${PORT}`);
   logger.info(`WebSocket path: ${WS_PATH}`);
   logger.info(`Health check: http://localhost:${PORT}${HEALTHZ_PATH}`);

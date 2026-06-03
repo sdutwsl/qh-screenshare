@@ -17,12 +17,16 @@ declare global {
         electronVersion: string;
         nodeVersion: string;
       }>;
+      getAppConfig: () => Promise<{
+        signalingUrl: string;
+        viewerPublicUrl: string;
+      }>;
     };
   }
 }
 
-const DEFAULT_SIGNALING_URL = import.meta.env.VITE_SIGNALING_URL || "ws://localhost:3000";
-const VIEWER_PUBLIC_URL = import.meta.env.VITE_VIEWER_PUBLIC_URL || "http://localhost:5174";
+let signalingUrl = import.meta.env.VITE_SIGNALING_URL || "ws://localhost:3000";
+let viewerPublicUrl = import.meta.env.VITE_VIEWER_PUBLIC_URL || "http://localhost:5174";
 
 let signaling: SignalingClient | null = null;
 let hostPeer: HostPeer | null = null;
@@ -73,7 +77,17 @@ stopBtn.addEventListener("click", () => {
 });
 
 async function loadEnvInfo(): Promise<void> {
-  signalingUrlDisplay.textContent = DEFAULT_SIGNALING_URL.replace(/\/ws\/?$/, "/ws");
+  if (window.hostAPI) {
+    try {
+      const config = await window.hostAPI.getAppConfig();
+      signalingUrl = config.signalingUrl;
+      viewerPublicUrl = config.viewerPublicUrl;
+    } catch {
+      // keep defaults
+    }
+  }
+
+  signalingUrlDisplay.textContent = signalingUrl.replace(/\/ws\/?$/, "/ws");
 
   if (window.hostAPI) {
     try {
@@ -87,7 +101,7 @@ async function loadEnvInfo(): Promise<void> {
         waylandNotice.classList.remove("hidden");
       }
 
-      viewerUrlDisplay.textContent = `${VIEWER_PUBLIC_URL}/?room=`;
+      viewerUrlDisplay.textContent = `${viewerPublicUrl}/?room=`;
     } catch {
       envSessionType.textContent = "unknown";
       envDesktop.textContent = "unknown";
@@ -108,7 +122,11 @@ async function startSharing(): Promise<void> {
 
   if (!navigator.mediaDevices || !navigator.mediaDevices.getDisplayMedia) {
     setStatus("不支持", "error");
-    showError("当前环境不支持屏幕共享 (getDisplayMedia 不可用)");
+    const hasMediaDevices = Boolean(navigator.mediaDevices);
+    const hasGetDisplayMedia = Boolean(navigator.mediaDevices?.getDisplayMedia);
+    showError(
+      `当前 Electron 环境不支持屏幕共享：mediaDevices=${hasMediaDevices}, getDisplayMedia=${hasGetDisplayMedia}`,
+    );
     return;
   }
 
@@ -152,7 +170,7 @@ async function startSharing(): Promise<void> {
 
   hostPeerId = randomUUID();
 
-  signaling = new SignalingClient(DEFAULT_SIGNALING_URL);
+  signaling = new SignalingClient(signalingUrl);
 
   signaling.onEvent((event) => {
     switch (event.type) {
@@ -222,7 +240,7 @@ function handleRoomCreated(roomId: string): void {
   }
 
   roomIdDisplay.textContent = roomId;
-  viewerUrlDisplay.textContent = `${VIEWER_PUBLIC_URL}/?room=${roomId}`;
+  viewerUrlDisplay.textContent = `${viewerPublicUrl}/?room=${roomId}`;
   viewerCountDisplay.textContent = "0";
   roomInfoBox.classList.remove("hidden");
 
@@ -264,7 +282,7 @@ function stopSharing(opts?: { keepError?: boolean; statusText?: string; statusTy
   hostPeerId = null;
 
   roomIdDisplay.textContent = "-";
-  viewerUrlDisplay.textContent = `${VIEWER_PUBLIC_URL}/?room=`;
+  viewerUrlDisplay.textContent = `${viewerPublicUrl}/?room=`;
   viewerCountDisplay.textContent = "0";
   roomInfoBox.classList.add("hidden");
 
