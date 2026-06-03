@@ -132,9 +132,13 @@ export class HostPeer {
     };
 
     pc.oniceconnectionstatechange = () => {
-      logger.debug(`ICE state [${viewerPeerId}]: ${pc.iceConnectionState}`, {
+      const state = pc.iceConnectionState;
+      logger.debug(`ICE state [${viewerPeerId}]: ${state}`, {
         roomId: this.roomId,
       });
+      if (state === "disconnected" || state === "failed") {
+        this.callbacks.onStatusChange(`ICE连接${state === "failed" ? "失败" : "断开"}`);
+      }
     };
 
     this.viewers.set(viewerPeerId, { peerId: viewerPeerId, pc });

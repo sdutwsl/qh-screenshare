@@ -106,6 +106,12 @@ async function startSharing(): Promise<void> {
   hideError();
   setStatus("获取屏幕...", "disconnected");
 
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getDisplayMedia) {
+    setStatus("不支持", "error");
+    showError("当前环境不支持屏幕共享 (getDisplayMedia 不可用)");
+    return;
+  }
+
   let stream: MediaStream;
   try {
     stream = await navigator.mediaDevices.getDisplayMedia({
@@ -158,12 +164,15 @@ async function startSharing(): Promise<void> {
         break;
 
       case "disconnected":
+        showError("信令服务器连接断开");
         setStatus("信令断开", "error");
+        stopSharing();
         break;
 
       case "error":
         showError(event.message);
         setStatus("错误", "error");
+        stopSharing();
         break;
 
       case "message":
