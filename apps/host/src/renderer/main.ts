@@ -47,6 +47,7 @@ const envSessionType = document.getElementById("env-session-type")!;
 const envDesktop = document.getElementById("env-desktop")!;
 const envDisplay = document.getElementById("env-display")!;
 const envWayland = document.getElementById("env-wayland")!;
+const signalingUrlDisplay = document.getElementById("signaling-url-display")!;
 
 function setStatus(text: string, type: "connected" | "disconnected" | "error"): void {
   statusText.textContent = text;
@@ -72,6 +73,8 @@ stopBtn.addEventListener("click", () => {
 });
 
 async function loadEnvInfo(): Promise<void> {
+  signalingUrlDisplay.textContent = DEFAULT_SIGNALING_URL.replace(/\/ws\/?$/, "/ws");
+
   if (window.hostAPI) {
     try {
       const info = await window.hostAPI.getRuntimeInfo();

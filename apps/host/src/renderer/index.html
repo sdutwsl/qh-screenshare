@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta
     http-equiv="Content-Security-Policy"
-    content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; connect-src 'self' ws://localhost:* wss://localhost:*; media-src 'self' blob:;"
+    content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; connect-src 'self' ws: wss:; media-src 'self' blob:;"
   />
   <title>UOS Screen Share</title>
   <link rel="stylesheet" href="styles.css" />
@@ -19,6 +19,7 @@
     </div>
 
     <div id="env-info" class="info-box">
+      <div>信令服务器：<span id="signaling-url-display">-</span></div>
       <div>会话类型：<span id="env-session-type">检测中...</span></div>
       <div>桌面环境：<span id="env-desktop">检测中...</span></div>
       <div>显示服务：<span id="env-display">-</span></div>
